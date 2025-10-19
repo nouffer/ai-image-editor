@@ -13,9 +13,9 @@ import {
 import Credits from "./credits";
 import SidebarMenuItems from "./sidebar-menu-items";
 import { User, Sparkles, Settings } from "lucide-react";
-import Upgrade from "./upgrade";
 import MobileSidebarClose from "./mobile-sidebar-close";
 import Link from "next/link";
+import Upgrade from "./upgrade";
 
 export async function AppSidebar() {
   return (
