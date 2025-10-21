@@ -82,14 +82,15 @@ model Verification {
 }
 
 model Project {
-    id        Int      @id @default(autoincrement())
-    name      String
-    imageUrl String
-    imagekitId String
-    userId    String
-    user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-    createdAt DateTime @default(now())
-    updatedAt DateTime @updatedAt
-    
-    @@index([userId])
+  id          String   @id @default(cuid())
+  name        String?
+  imageUrl    String
+  imageKitId  String
+  filePath    String
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("project")
 }

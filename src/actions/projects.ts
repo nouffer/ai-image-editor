@@ -1,144 +1,117 @@
 "use server";
 
-import { authClient } from "~/lib/auth-client";
+import { db } from "~/server/db";
+import { auth } from "~/lib/auth";
+import { headers } from "next/headers";
 
-interface Project {
-  id: string;
-  name: string | null;
+interface CreateProjectData {
   imageUrl: string;
   imageKitId: string;
   filePath: string;
-  userId: string;
-  createdAt: Date;
-  updatedAt: Date;
+  name?: string;
 }
 
-interface GetUserProjectsResult {
-  success: boolean;
-  projects?: Project[];
-  error?: string;
-}
-
-/**
- * Server action to fetch user's projects
- * This is a placeholder implementation - replace with your actual database logic
- */
-export async function getUserProjects(): Promise<GetUserProjectsResult> {
+export async function createProject(data: CreateProjectData) {
   try {
-    // Get the current session to verify the user is authenticated
-    const session = await authClient.getSession();
+    const session = await auth.api.getSession({
+      headers: await headers(),
+    });
 
-    if (!session?.data?.user?.id) {
-      return {
-        success: false,
-        error: "User not authenticated",
-      };
+    if (!session?.user?.id) {
+      throw new Error("Unauthorized");
     }
 
-    // TODO: Replace this with actual database query
-    // Example with Prisma:
-    // const projects = await prisma.project.findMany({
-    //   where: { userId: session.data.user.id },
-    //   orderBy: { createdAt: 'desc' }
-    // });
+    const project = await db.project.create({
+      data: {
+        name: data.name ?? "Untitled Project",
+        imageUrl: data.imageUrl,
+        imageKitId: data.imageKitId,
+        filePath: data.filePath,
+        userId: session.user.id,
+      },
+    });
 
-    // For now, return empty array as placeholder
-    const projects: Project[] = [];
-
-    return {
-      success: true,
-      projects,
-    };
+    return { success: true, project };
   } catch (error) {
-    console.error("Error fetching user projects:", error);
-    return {
-      success: false,
-      error:
-        error instanceof Error ? error.message : "Failed to fetch projects",
-    };
+    console.error("Project creation error:", error);
+    return { success: false, error: "Failed to create project" };
   }
 }
 
-/**
- * Server action to create a new project
- */
-export async function createProject(
-  _name: string,
-  _imageUrl: string,
-  _imageKitId: string,
-  _filePath: string,
-): Promise<GetUserProjectsResult> {
+export async function getUserProjects() {
   try {
-    const session = await authClient.getSession();
+    const session = await auth.api.getSession({
+      headers: await headers(),
+    });
 
-    if (!session?.data?.user?.id) {
-      return {
-        success: false,
-        error: "User not authenticated",
-      };
+    if (!session?.user?.id) {
+      throw new Error("Unauthorized");
     }
 
-    // TODO: Replace with actual database insertion
-    // Example with Prisma:
-    // const project = await prisma.project.create({
-    //   data: {
-    //     name,
-    //     imageUrl,
-    //     imageKitId,
-    //     filePath,
-    //     userId: session.data.user.id,
-    //   },
-    // });
+    const projects = await db.project.findMany({
+      where: {
+        userId: session.user.id,
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+    });
 
-    return {
-      success: true,
-      projects: [],
-    };
+    return { success: true, projects };
   } catch (error) {
-    console.error("Error creating project:", error);
-    return {
-      success: false,
-      error:
-        error instanceof Error ? error.message : "Failed to create project",
-    };
+    console.error("Projects fetch error:", error);
+    return { success: false, error: "Failed to fetch projects" };
   }
 }
 
-/**
- * Server action to delete a project
- */
-export async function deleteProject(
-  _projectId: string,
-): Promise<GetUserProjectsResult> {
+export async function deductCredits(
+  creditsToDeduct: number,
+  operation?: string,
+) {
   try {
-    const session = await authClient.getSession();
-
-    if (!session?.data?.user?.id) {
-      return {
-        success: false,
-        error: "User not authenticated",
-      };
+    // Input validation - prevent negative numbers or invalid inputs
+    if (
+      !creditsToDeduct ||
+      creditsToDeduct <= 0 ||
+      !Number.isInteger(creditsToDeduct)
+    ) {
+      return { success: false, error: "Invalid credit amount" };
     }
 
-    // TODO: Replace with actual database deletion
-    // Example with Prisma:
-    // await prisma.project.delete({
-    //   where: {
-    //     id: projectId,
-    //     userId: session.data.user.id, // Ensure user owns the project
-    //   },
-    // });
+    const session = await auth.api.getSession({
+      headers: await headers(),
+    });
 
-    return {
-      success: true,
-      projects: [],
-    };
+    if (!session?.user?.id) {
+      throw new Error("Unauthorized");
+    }
+
+    // First check if user has enough credits
+    const user = await db.user.findUnique({
+      where: { id: session.user.id },
+      select: { credits: true },
+    });
+
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    if (user.credits < creditsToDeduct) {
+      return { success: false, error: "Insufficient credits" };
+    }
+
+    // Deduct the specified amount of credits
+    const updatedUser = await db.user.update({
+      where: { id: session.user.id },
+      data: { credits: user.credits - creditsToDeduct },
+    });
+
+    return { success: true, remainingCredits: updatedUser.credits };
   } catch (error) {
-    console.error("Error deleting project:", error);
-    return {
-      success: false,
-      error:
-        error instanceof Error ? error.message : "Failed to delete project",
-    };
+    console.error(
+      `Credit deduction error${operation ? ` for ${operation}` : ""}:`,
+      error,
+    );
+    return { success: false, error: "Failed to deduct credits" };
   }
 }
